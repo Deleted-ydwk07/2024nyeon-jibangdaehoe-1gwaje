@@ -1,0 +1,698 @@
+리전 항상 확인
+이름이랑 태그는 똑같이 하는게 좋음
+설치 안되면 경로 잘보기
+대부분 <네임스페이스>-<이름> 일거다 (예시 : wsi-cluster, wsi-hpa)
+과제지에 나오는대로
+
+aws cli 설치 링크 : "https://docs.aws.amazon.com/ko_kr/cli/latest/userguide/getting-started-install.html"
+
+VPC 만들기 (VPC)
+바탕화면에 아무파일을 만든다.
+"폴더 열기"를 눌러서, 아무폴더를 선택한다
+"templates"폴더를 만든다.
+VScode에서 "vpc.yaml" 파일을 "templates"폴더 안에 만든다.
+링크에 들어가서 "vpc.yaml"을 복사한다. (링크 : "https://github.com/demopassword/VPC/blob/main/eks/2AZ-3Teir-VPC.yml")
+VScode에 있는 "vpc.yaml"파일에 붙여넣는다.
+"vpc.yaml"파일을 수정한다. (과제에 나오는대로 수정하면 됨)
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+사용자 만들기 (보안 자격 증명)
+사용자 이름 : <아무거나>
+권한 옵션 : "직접 정책 연결"
+권한 정책 : "AdministratorAccess"
+
+액세스 키 만들기 ("사용자" 보안 자격 증명)
+사용 사례 : "Command Line Interface(CLI)"
+
+AWS CLI랑 AWS 계정 연결하기
+명령어 : "aws configure"
+AWS Access Key ID [None] : <액세스 키>
+AWS Secret Access Key [None] : <비밀 액세스 키>
+Default region name [None] : ap-northeast-2
+Default output format [None] : json
+
+"aws cloudformation create-stack --stack-name vpc-stack --template-body file://vpc.yaml --capabilities CAPABILITY_IAM"을 수정하고, VScode 터미널에 붙여넣는다. (안되면 "cd templates") (링크 : "https://github.com/demopassword/VPC/tree/main/eks")
+"CloudFormation"에서 "스택" 확인하기(만들어 졌는지)
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Bastion 만들기 (EC2)
+IAM 인스턴스 프로파일 : "PowerUserAccess"
+사용자 데이터 (Bastion 포트 번호 바꿀때 보안 그룹도 수정) (링크 : "https://github.com/demopassword/VPC/tree/main/eks")
+#!/bin/bash
+sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config
+sed -i 's/#Port 22/Port <Bastion 포트 번호>/g' /etc/ssh/sshd_config
+echo 'password' | passwd --stdin ec2-user
+systemctl restart sshd
+
+탄력적 IP 주소 할당(프라이빗 IP 주소 X)
+Bastion 재부팅
+
+Bastion, VScode 연결하기
+VScode 마켓플레이스에서 "Remote-SSH" 설치
+">Remote-SSH: Open SSH Configuration File..."에서 코드 수정하기
+Host 123
+    HostName <Bastion IP 주소>
+    User ec2-user
+    Port <Bastion 포트 번호>
+
+">Remote-SSH: Connect to Host..."로 연결하기 (비밀번호 : "password")
+"폴더 열기"에서 "/home/ec2-user/"로 이동하기
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+VScode에서 패키지 설치하기
+VScode 터미널에서 "sudo su" 입력하기
+/home/ec2-user로 이동 : "cd ~"
+도커 설치 (링크 : "https://github.com/demopassword/VPC/tree/main/eks")
+#docker install
+yum install docker -y
+sudo systemctl restart docker
+usermod -aG docker ec2-user
+systemctl restart docker
+
+eksctl 설치, helm 설치, awscli 설치, jq 설치, git 설치 (설치할때 뭐라 나오면 "y" 입력)(링크 : https://github.com/demopassword/VPC/tree/main/eks)
+#eksctl install(latest)
+ARCH=amd64
+PLATFORM=$(uname -s)_$ARCH
+curl -sLO "https://github.com/eksctl-io/eksctl/releases/latest/download/eksctl_$PLATFORM.tar.gz"
+curl -sL "https://github.com/eksctl-io/eksctl/releases/latest/download/eksctl_checksums.txt" | grep $PLATFORM | sha256sum --check
+tar -xzf eksctl_$PLATFORM.tar.gz -C /tmp && rm eksctl_$PLATFORM.tar.gz
+sudo mv /tmp/eksctl /usr/local/bin
+
+#helm install version v3.12.0 ( k8s 1.26 ~ 1.27 )
+wget https://get.helm.sh/helm-v3.12.0-linux-amd64.tar.gz
+tar zxvf helm-v3.12.0-linux-amd64.tar.gz
+mv linux-amd64/helm /bin/
+
+#awscli install
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+sudo ./aws/install
+mv /usr/local/bin/aws /bin/
+
+# jq install
+yum install jq -y
+
+# git install
+yum install git -y
+
+go 설치 : "sudo yum install go -y"
+"application" 폴더 만들기
+"application" 폴더 안에 "main.go", "Dockerfile" 만들기
+대회장에서 받은 "main.go"파일 복사해서, VScode에 있는 "main.go" 파일에 붙여넣기
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+"Dockerfile" 작성하기
+FROM golang:alpine # Alpine Linux 기반의 경량화된 Go 개발 환경 Docker 이미지를 사용합니다.
+WORKDIR /app # 작업 디렉토리를 /app로 설정합니다.
+COPY . . # 현재 디렉토리의 모든 파일을 Docker 컨테이너의 /app 디렉토리로 복사합니다.
+RUN apk add --no-cache curl # Alpine Linux의 패키지 관리자인 apk를 사용하여 curl을 설치합니다.
+RUN apk add --no-cache ca-certificates # SSL/TLS 연결에 필요한 인증서를 설치합니다.
+RUN adduser --disabled-password --gecos '' <USER 이름> # 지정된 이름의 사용자를 생성합니다.
+USER <USER 이름> # 이후의 명령어를 해당 사용자의 권한으로 실행합니다.
+RUN go mod download # Go 모듈을 다운로드합니다.
+RUN go build -o <제공받은 파일.go> # Go 어플리케이션을 빌드하여 main 바이너리를 생성합니다.
+ENV SECRET_NAME=<Secrets Manager 이름> # Secrets Manager에서 사용할 시크릿의 이름을 환경 변수로 설정합니다.
+ENV AWS_REGION=ap-northeast-2 # AWS 지역(region)을 환경 변수로 설정합니다.
+CMD ["./<바이너리 파일>"] # 컨테이너가 시작될 때 실행할 명령을 설정합니다. 여기서는 빌드된 main 바이너리를 실행합니다.
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+/home/ec2-user로 이동 : "cd /home/ec2-user"
+/home/ec2-user/application으로 이동 : "cd application"
+"application" 폴더 안에 "go.mod" 생성 : "go mod init example.com/m/v2"
+"main.go"파일에 있는 package 설치 : "go get "<package>"" (패키지 찾는법 : 그냥 패키지 처럼 생김, 최소 하나 이상 있음)
+터미널 새로 생성 ("bash" 터미널)
+ecr 생성 : "aws ecr create-repository --repository-name <ecr 이름> --region ap-northeast-2" (새 터미널에서 ecr 생성 명령어만 치고, 다시 "sudo" 터미널로 가기) (링크 : "없음")
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+보안 그룹 만들기 만들기 (EC2)
+이름 : "<ElastiCache 이름-sg>"
+VPC : "<ElastiCache가 있는 VPC>"
+ElasticCache 기본 포트 : "6379" (아웃바운드 규칙 : "없음")
+
+보안 그룹 만들기 (EC2)
+이름 : "<Amazon DocumentDB 이름-sg>"
+VPC : "<Amazon DocumentDB가 있는 VPC>"
+Amazon DocumentDB 기본 포트 : "27017"
+
+서브넷 그룹 만들기 (ElastiCache)
+서브넷 선택 : "Protected subnet" 선택
+
+Redis 캐시 만들기 (ElastiCache)
+배포 옵션 : "자체 캐시 설계"
+생성 방법 : "클러스터 캐시"
+클러스터 모드 : "비활성화됨" (샤드 뭐라고 나오면 "활성화됨")
+포트 : "6379" (기본 포트)
+다중 AZ : "사용"
+자동 장애 조치 : "사용"
+파라미터 그룹 : (클러스터 모드 비활성화됨 : "기본", 클러스터 모드 활성화됨 : "cluster.on")
+서브넷 그룹 : "기존 서브넷 그룹 선택"
+가용 영역 배치 : "기본 설정 없음" (과제에서 하라면 해야됨)
+유지 관리 기간 : "과제지에 나오는대로 하기" (참고 : 9시간 시차 있음) 예시 : 외국 월 10:00, 한국 월 1:00, 9시간 전
+로그 : "느린 로그", "엔진 로그" 사용
+로그 형식 : "JSON"
+로그 대상 유형 : "CloudWatch Logs
+로그 대상 : "새 로그 그룹 생성"
+
+서브넷 그룹 만들기 (Amazon DocumentDB)
+서브넷 선택 : "Protected subnet" 선택
+
+클러스터 만들기 (Amazon DocumentDB)
+클러스터 유형 : "인스턴스 기반 클러스터"
+Storage configuration : "Amazon DocumentDB Standard"
+Compute resources : "Don't connect to an EC2 compute resource" (이거 안하면 yaml파일 안돌아감)
+사용자 이름 : "<과제지에 나온대로 하기>"
+암호 : ("password" 추천)
+고급 설정 표시 : "키기"
+포트 : "27017"
+로그 : "감사 로그", "프로파일러 로그" 사용
+유지 관리 기간 : "과제지에 나오는대로 하기" (참고 : 9시간 시차 있음) 예시 : 외국 월 10:00, 한국 월 1:00, 9시간 전
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+bastion에 패키지 깔기 (EC2)
+"DocumentDB"에서 "클러스터 식별자" 위에꺼 들어가서 "클러스터(으)로 인증하는 데 필요한 Amazon DocumentDB 인증 기관(CA) 인증서 다운로드"를 터미널에 붙여넣기 ("DocumentDB"에서 "상태"가 "abailable"일때 하기)
+패키지들을 최신버전으로 만들기 : "sudo dnf update" (링크 : "https://medium.com/@imakhileshwar/install-mongodb-community-edition-on-amazon-linux-2023-and-configure-mongodb-to-require-b23f504361e9")
+"mongodb-org-7.0.repo" 파일 생성 : "vim /etc/yum.repos.d/mongodb-org-7.0.repo" (링크 : "https://medium.com/@imakhileshwar/install-mongodb-community-edition-on-amazon-linux-2023-and-configure-mongodb-to-require-b23f504361e9")
+[mongodb-org-7.0]
+name=MongoDB Repository
+baseurl=https://repo.mongodb.org/yum/amazon/2023/mongodb-org/7.0/x86_64/
+gpgcheck=1
+enabled=1
+gpgkey=https://pgp.mongodb.com/server-7.0.asc
+
+나가기 : "esc" -> ":x"
+
+패키지 여러가지 설치 : "sudo dnf install -qy mongodb-mongosh-shared-openssl3" (링크 : "https://medium.com/@imakhileshwar/install-mongodb-community-edition-on-amazon-linux-2023-and-configure-mongodb-to-require-b23f504361e9")
+mongoDB 서버 연결 : "mongosh" (링크 : "https://medium.com/@imakhileshwar/install-mongodb-community-edition-on-amazon-linux-2023-and-configure-mongodb-to-require-b23f504361e9")
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+eks 클러스터 만들기 (VScode)
+"manifest" 폴더 만들기
+"mainfest" 폴더 안에 "cluster.yaml" 파일을 만든다.
+링크에 들어가서 "cluster.yaml"을 복사한다. (링크 : "https://github.com/demopassword/EKS/blob/main/Cluster/CA/cluster.yaml")
+VScode에 있는 "cluster.yaml" 파일에 붙여넣는다.
+"cluster.yaml" 파일을 수정한다.
+"skills" 바꾸기
+"private-c" 삭제
+찾기 : "Ctrl + F"
+바꾸기 : "Ctrl + H"
+예시 : 
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: ws-cluster
+  version: "1.27"
+  region: ap-northeast-2
+
+# eksctl utils update-cluster-endpoints --name=wsi-api-cluster --private-access=true --public-access=false
+
+vpc:
+  subnets:
+    private:
+      private-a: { id: <private-a 서브넷 ID> }
+      private-b: { id: <private-b 서브넷 ID> }
+
+
+cloudWatch:
+  clusterLogging:
+    enableTypes: ["*"]
+
+
+iam:
+  withOIDC: true
+  serviceAccounts:
+  - metadata:
+      name: aws-load-balancer-controller
+      namespace: kube-system
+    wellKnownPolicies:
+      awsLoadBalancerController: true
+  - metadata:
+      name: cluster-autoscaler
+      namespace: kube-system
+      labels: {aws-usage: "cluster-ops"}
+    wellKnownPolicies:
+      autoScaler: true
+  - metadata:
+      name: autoscaler-service
+      namespace: kube-system
+    attachPolicy:
+      Version: "2012-10-17"
+      Statement:
+      - Effect: Allow
+        Action:
+        - "autoscaling:DescribeAutoScalingGroups"
+        - "autoscaling:DescribeAutoScalingInstances"
+        - "autoscaling:DescribeLaunchConfigurations"
+        - "autoscaling:DescribeTags"
+        - "autoscaling:SetDesiredCapacity"
+        - "autoscaling:TerminateInstanceInAutoScalingGroup"
+        - "ec2:DescribeLaunchTemplateVersions"
+        Resource: '*'
+
+managedNodeGroups:
+  - name: ws-app
+    labels: { ws/dedicated: app }
+    instanceType: c5.large
+    instanceName: ws-app
+    desiredCapacity: 2
+    minSize: 2
+    maxSize: 20
+    privateNetworking: true
+    volumeType: gp2
+    volumeEncrypted: true
+    subnets:
+      - private-a
+      - private-b
+    tags:
+      k8s.io/cluster-autoscaler/enabled: "true"
+      k8s.io/cluster-autoscaler/ws-cluster: "owned"
+    iam:
+      withAddonPolicies:
+        imageBuilder: true
+        externalDNS: true
+        certManager: true
+
+  - name: ws-addon
+    labels: { ws/dedicated: addon }
+    instanceType: c5.large
+    instanceName: ws-addon
+    desiredCapacity: 2
+    minSize: 2
+    maxSize: 20
+    privateNetworking: true
+    volumeType: gp2
+    volumeEncrypted: true
+    subnets:
+      - private-a
+      - private-b
+    tags:
+      k8s.io/cluster-autoscaler/enabled: "true"
+      k8s.io/cluster-autoscaler/ws-cluster: "owned"
+    iam:
+      withAddonPolicies:
+        imageBuilder: true
+        externalDNS: true
+        certManager: true
+
+"eksctl create cluster -f ../manifest/cluster.yaml" (에러 해결 : AWS CLI랑 AWS 계정 연결하기) (에러 해결하고, "eksctl create cluster -f ../manifest/cluster.yaml" 명령어 다시) (명령어 친 상태로 두기)
+
+에러 해결하는 법
+사용자 만들기 (보안 자격 증명)
+사용자 이름 : <아무거나>
+권한 옵션 : "직접 정책 연결"
+권한 정책 : "AdministratorAccess"
+
+액세스 키 만들기 ("사용자" 보안 자격 증명)
+사용 사례 : "Command Line Interface(CLI)"
+
+AWS CLI랑 AWS 계정 연결하기 (VScode)
+명령어 : "aws configure"
+AWS Access Key ID [None] : <액세스 키>
+AWS Secret Access Key [None] : <비밀 액세스 키>
+Default region name [None] : ap-northeast-2
+Default output format [None] : json
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+터미널 새로 생성 ("bash" 터미널)
+
+main.go 고치기
+아까 만든 "Redis 캐시"에 들어가서, "클러스터 세부 정보"에서 "기본 엔드포인트"를 복사하고, "main.go"에서 찾아서 붙여넣기 (대회때 알려줌) (예시 : "redisAddress")
+
+"application"으로 이동 : "cd application"
+"DocumentDB"에서 "클러스터 식별자" 위에꺼 들어가서 "mongo 셸을 사용하여 이 클러스터에 연결"을 터미널에 붙여넣기 (<암호삽입>에 "password" 넣기), (명령어에서 앞에 "mongo"를 "mongosh"로 바꾸기)
+이동 : "use <과제지에 나와있음>" (과제지에 나오는대로 이동) ("main.go"에 있음) (예시 : "use mydatabase", mydatabase로 이동)
+Collection 생성 : "db.createCollection("<과제지에 나와있음>")"
+나가기 : "exit"
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Secrets Manager 만들기 (Secrets Manager)
+보안 암호 유형 : "Amazon DocumentDB 데이터베이스에 대한 자격 증명"
+사용자 이름 : "<"mongo 셸을 사용하여 이 클러스터에 연결" (DocumentDB) 여기에서 --username 뒤에꺼랑 똑같이 만들기>"
+암호 : ("<mongo 셸을 사용하여 이 클러스터에 연결" (DocumentDB) 여기에서 --password 뒤에꺼랑 똑같이 만들기>") (예시 : )
+데이터베이스 : <그냥 클릭하기>
+보안 암호 이름 : <Secrets Manager 이름>
+
+"보안 암호 값 검색" 눌러서 ("Amazon DocumentDB"에서 "사용자 이름", "password")똑같이 했는지 확인 (보는 법 : 명령어 쓴거 올려서 봐야함)
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Dockerfile 수정하기
+"보안 암호 이름" 복사해서, "Dockerfile" 수정하기
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Docker 빌드하기 (ECR, bash 터미널)
+레포지토리 푸시 명령 : "ECR" -> "푸시 명령 보기", "1", "2", 복사하기
+1. "aws ecr get-login-password --region <리전> | docker login --username AWS --password-stdin <레포지토리 URL(숫자)>.dkr.ecr.<리전>.amazonaws.com"
+오류 : "permission denied /var/run/docker.sock" 해결 : "sudo chmod 666 /var/run/docker.sock"
+
+2. "docker build ." ("cd application"해서 "application에서 명령어 치기)
+
+"manifest" 폴더 안에 "deployment.yaml" 파일을 만든다.
+"manifest" 폴더 안에 "service.yaml" 파일을 만든다.
+"manifest" 폴더 안에 "ingress.yaml" 파일을 만든다.
+"manifest" 폴더 안에 "hpa.yaml" 파일을 만든다.
+
+도커 이미지 확인 : "docker image ls" (IMAGE ID 부분 보면 됨)
+도커 "컨테이너 포트 확인" : "docker run <이미지 이름>" (뒤에 포트 번호 나옴)
+도커 이미지 실행 : "docker run -p <호스트 포트>:<컨테이너 포트> <이미지 이름>" (실행 한 상태로 두기)
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+웹 서버 응답 확인하기 (VScode)
+터미널 새로 생성 ("bash" 터미널)
+"root"로 전환 : "sudo su"
+웹 서버가 작동하는지 확인 : "curl localhost:80"
+웹 서버에 나타낼 문자 예시 : "curl -X POST -H "application/json" -d '{"name": "Alice", "age": 3}' localhost:80/add" ("name", "Alice", "age", "3" 부분 수정 하기) (숫자는 "" 안붙혀도 됨)
+웹 서버에 나타나는 문자 확인 : curl localhost/get?name=Alice (위에 다르게 했다면 "name=Alice" 이부분 수정 하기)
+도커 이미지 실행한 터미널로 가서 꺼도 됨
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+docker 이미지 ECR로 푸시 하기 (ECR)
+"리포지토리" -> <만든 ECR> -> "편집" -> "푸시할 때 스캔" 키기
+레포지토리 푸시 명령 : "ECR" -> "푸시 명령 보기", "1", "2", "3", "4" 복사하기 (1번 부터 해서 4번까지 하기)
+1. 예시 : "aws ecr get-login-password --region <리전> | docker login --username AWS --password-stdin <레포지토리 URL(숫자)>.dkr.ecr.<리전>.amazonaws.com" ("푸시 명령 보기"에 있음)
+2. 예시 : "docker build -t <ECR 레포지토리 이름> ." ("푸시 명령 보기"에 있음)
+3. 예시 : "docker tag <ECR 레포지토리 이름>:latest <레포지토리 URL(숫자)>.dkr.ecr.<리전>.amazonaws.com/<ECR 레포지토리 이름>:latest" ("푸시 명령 보기"에 있음)
+4. 예시 : "docker push <레포지토리 URL(숫자)>.dkr.ecr.<리전>.amazonaws.com/<ECR 레포지토리 이름>:latest" ("푸시 명령 보기"에 있음)
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+eks 클러스터 namepace 만들기
+2번째 터미널로 간다.
+"root"로 전환 : "sudo su"
+EKS 클러스터의 kubeconfig 업데이트 : "aws eks update-kubeconfig --name <eks 클러스터 이름>"
+Kubernetes 클러스터에 네임스페이스 생성 : "k create ns <namespace 이름>" ("k"는 "kubectl" 줄임, "k"로 사용 됨)
+namespace 확인 : "k get ns"
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+디플로이먼트 생성 (deployment.yaml)
+링크에 들어가서 "디플로이먼트 생성"에 있는 코드를 복사하고, VScode에 있는 "deployment.yaml" 파일에 붙여넣는다. (링크 : "https://kubernetes.io/ko/docs/concepts/workloads/controllers/deployment/")
+deployment.yaml 수정하기
+"name:" 밑에 "namespace:"를 추가한다.
+"app: nginx"를 "app: golang"으로 바꿔준다.
+"컨테이너 포트"도 바꿔주기 (과제지에 나오는대로)
+"resources:" 부분도 만들기 (링크 : "https://github.com/demopassword/EKS/blob/main/deployment/deployment.yaml" 줄 : 67~73)
+"serviceAccountName:" 부분도 만들기 (뒤에 만든거랑 이름 같아야 함 "secret-deployment-sa") (링크 : "https://github.com/demopassword/EKS/blob/main/deployment/deployment.yaml" 줄 : 26~27)
+예시 : 
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: <이름-deployment>
+  namespace: <namespace 이름>
+  labels:
+    app: golang
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: golang
+  template:
+    metadata:
+      labels:
+        app: golang
+    spec:
+      serviceAccountName: secret-deployment-sa
+      automountServiceAccountToken: false
+      containers:
+      - name: <이름-container>
+        image: <ecr 리포지토리 URI>
+        ports:
+        - containerPort: 8080
+        resources:
+          limits:
+            cpu: 512m
+            memory: 500Mi
+          requests:
+            cpu: 512m
+            memory: 500Mi
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+helm을 사용하여 eks 클러스터에 CSI 드라이버 설치 : (링크 : "https://github.com/demopassword/EKS/tree/main/secret/ASCP")
+helm repo add secrets-store-csi-driver https://kubernetes-sigs.github.io/secrets-store-csi-driver/charts
+helm install -n kube-system csi-secrets-store secrets-store-csi-driver/secrets-store-csi-driver
+
+helm repo add aws-secrets-manager https://aws.github.io/secrets-store-csi-driver-provider-aws
+helm install -n kube-system secrets-provider-aws aws-secrets-manager/secrets-store-csi-driver-provider-aws
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+쉘 환경 변수인 SECRET_ARN을 설정하는 명령어 : "export SECRET_ARN <보안 암호 ARN>" ("Secrets Manager" -> "보안 암호" -> "보안 암호 세부 정보" -> "보안 암호 ARN")
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+"secret_policy"라는 이름의 정책 생성 : (링크 : "https://github.com/demopassword/EKS/tree/main/secret/ASCP")
+aws --region ap-northeast-2 iam \
+	create-policy --query Policy.Arn \
+    --output text --policy-name secret_policy \
+    --policy-document '{
+    "Version": "2012-10-17",
+    "Statement": [ {
+        "Effect": "Allow",
+        "Action": ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"],
+        "Resource": ["'"$SECRET_ARN"'" ]
+    } ]
+}'
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+EKS 클러스터에서 IAM OIDC 공급자를 연결하고 IAM 서비스 계정을 생성하기 (링크 : "https://github.com/demopassword/EKS/tree/main/secret/ASCP")
+eksctl utils associate-iam-oidc-provider \
+    --region=ap-northeast-2 --cluster=<eks 클러스터 이름-cluster> \
+    --approve
+
+eksctl create iamserviceaccount \
+    --region=ap-northeast-2 --name "secret-deployment-sa" --namespace "<namespace 이름>" \
+    --cluster <클러스터 이름-cluster> \
+    --attach-policy-arn arn:aws:iam::210761305382:policy/secret_policy --approve \
+    --override-existing-serviceaccounts
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Kubernetes에서 네임스페이스에 속한 모든 서비스를 조회하는 명령어(만든거 확인하는 명령어) : "k get sa -n <네임스페이스 이름>"
+deployment.yaml 파일에 정의된 리소스(파드, 서비스 등)가 Kubernetes 클러스터에 배포하는 명령어 : "k apply -f ../manifest/deployment.yaml"
+<네임스페이스 이름>에 속한 모든 파드를 출력하는 명령어 : "k get pod -n <네임스페이스 이름>" (계속 해서, "READY"가 "1/1"이 될때까지 하기) ("NAME"에서 복사)
+<네임스페이스 이름>에 속한 파드의 상세 정보를 확인 : "k describe pod -n <네임스페이스 이름> <파드 "NAME" 붙여넣기>"
+<네임스페이스 이름>에 속한 <파드 "NAME"> 파드의 로그를 출력합니다. : "k logs -n <네임스페이스 이름> <파드 "NAME" 붙여넣기>"
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Fargate 프로파일 만들기 ("eks" -> "컴퓨팅" -> "Fargate")
+포드 실행 역할 : "AmazonEKSFargatePodExecutionRolePolicy"
+서브넷 : private A, private B
+네임스페이스 : <네임스페이스 이름>
+레이블 추가 : ("키" : app), ("값" : golang)
+
+Fargate 역할 만들기(보안 자격 증명)
+신뢰할 수 있는 엔터티 유형 : "AWS 서비스"
+서비스 또는 사용 사례 : "EKS - Fargate pod"
+정책 이름 : "AmazonEKSFargatePodExecutionRolePolicy"
+역할 이름 : "AmazonEKSFargatePodExecutionRolePolicy-Role"(추천)
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+service.yaml 만들기
+링크에서 "service.yaml"을 복사해서 VScode에 있는 "service.yaml" 파일에 붙여 넣는다 (링크 : "https://github.com/demopassword/EKS/blob/main/service/service.yaml")
+"app.kubernetes.io/name: deploy" 이 부분을 "app: golang"으로 바꾼다
+예시 : 
+apiVersion: v1
+kind: Service
+metadata:
+  name: <이름-svc>
+  namespace: <네임스페이스 이름>
+spec:
+  selector:
+    app: golang
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+
+deployment.yaml 파일에 정의된 리소스(파드, 서비스 등)가 Kubernetes 클러스터에 배포하는 명령어 : "k apply -f ../manifest/deployment.yaml"
+<네임스페이스 이름>에 속한 모든 파드를 출력하는 명령어 : "k get pods -n <네임스페이스 이름>" (계속 해서, "READY"가 "1/1"이 될때까지 하기) ("NAME"에서 복사)
+<네임스페이스 이름>에 속한 파드의 상세 정보를 확인 : "k describe pods -n <네임스페이스 이름> <파드 "NAME" 붙여넣기>"
+
+"Warning LoggingDisabled <age> Fargate-scheduler Disabled logging configmap was not found. configmap "aws-logging" not found"
+뜰때 : "mainfest"폴더 안에 "aws-observability-namespace.yaml" 파일을 만든다. (링크 : "https://docs.aws.amazon.com/ko_kr/eks/latest/userguide/fargate-logging.html")
+링크에 들어가서, "로그 라우터 구성"에 있는 코드를 복사하고, "aws-observability-namespace.yaml" 파일 안에 붙여넣는다 (링크 : "https://docs.aws.amazon.com/ko_kr/eks/latest/userguide/fargate-logging.html")
+kind: Namespace
+apiVersion: v1
+metadata:
+  name: aws-observability
+  labels:
+    aws-observability: enabled
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+상위 파일로 이동 : "cd .."
+"manifest" 파일로 이동 : "cd manifest"
+"aws-observability-namespace.yaml"파일 실행 : "kubectl apply -f aws-observability-namespace.yaml" (링크 : "https://docs.aws.amazon.com/ko_kr/eks/latest/userguide/fargate-logging.html")
+해당 네임스페이스에 있는 배포들의 목록을 보여주는 명령어 : "k get deployment -n wsi"
+<네임스페이스 이름>에 속한 모든 파드를 출력하는 명령어 : "k get pods -n <네임스페이스 이름>" (계속 해서, "READY"가 "1/1"이 될때까지 하기)
+"service.yaml" 파일 실행 : "k apply -f ./service.yaml"
+<네임스페이스 이름>에 있는 모든 서비스를 가져오는 명령어 : "k get svc -n wsi"
+<네임스페이스 이름>에 속한 모든 파드를 출력하는 명령어 : "k get pods -n <네임스페이스 이름>" (계속 해서, "READY"가 "1/1"이 될때까지 하기)
+<네임스페이스 이름>에 있는 <파드 "NAME">에 대해 셸을 실행하는 명령어 : "k exec -it -n <네임스페이스 이름> <파드 "NAME"> sh" ("/app # "으로 변함) (이상태로 두기)
+
+4번 터미널로 이동
+<네임스페이스 이름>에 속한 모든 파드를 출력하는 명령어 : "k get pods -n <네임스페이스 이름>" (계속 해서, "READY"가 "1/1"이 될때까지 하기) ("NAME"에서 복사)
+<deployment 이름>에 속한 파드 중 하나에 셸을 실행하는 명령어 : "k exec -n <네임스페이스 이름> -it deploy/<deployment 이름> sh"
+웹 서버에 요청 보내기 : "curl <서비스 이름>.<네임스페이스 이름>.svc.cluster.local"
+웹 서버에 "name=Alice"라는 요청 보내기"curl <서비스 이름>.<네임스페이스 이름>.svc.cluster.local/get?name=Alice"
+나가기 : "exit"
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+hpa.yaml 만들기전에 설치할거 하기
+"Metrics Server"를 설치하는 명령어 : "kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml" (링크 : "https://github.com/demopassword/EKS/tree/main/hpa")
+"metrics-server" 디플로이먼트를 편집하는 명령 : "k edit -n kube-system deploy/metrics-server" (링크 : "https://github.com/demopassword/EKS/tree/main/hpa")
+이부분 추가하기 : "- --kubelet-insecure-tls"
+이부분 영상에서는 10250으로 되있음 (- --secure-port=10250)
+예시 : 
+  spec:
+      containers:
+      - args:
+        - --cert-dir=/tmp
+        - --kubelet-insecure-tls # add field
+        - --secure-port=10250
+        - --kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname
+        - --kubelet-use-node-status-port
+        - --metric-resolution=15s
+
+변경 사항을 저장하고 편집기를 종료 : "ESC" -> ":x"
+
+hpa.yaml 만들기
+링크에 들어가서 hpa.yaml 복사하고, VScode에 있는 "hpa.yaml" 파일에 붙여넣기 (링크 : "https://github.com/demopassword/EKS/blob/main/hpa/hpa.yaml")
+"hpa.yaml" 파일 수정하기
+예시 : 
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: <이름-hpa>
+  namespace: <네임스페이스 이름>
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: <deployment 이름>
+  minReplicas: 2
+  maxReplicas: 20
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 60
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 60
+
+hpa.yaml를 클러스터에 배포하는 명령어 : "k apply -f ./manifest/hpa.yaml"
+hpa 조회하는 명령어 : "k get hpa -A" (계속 해서, "TARGETS"가 "<UNKNOWN>" 안뜰때까지 하기)
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+ingress.yaml 만들기전에 설치할거 하기
+"elbv2.k8s.aws/pod-readiness-gate-inject=enabled" 여기에 네임스페이스 추가하는 명령어 : "kubectl label namespace <네임스페이스 이름> elbv2.k8s.aws/pod-readiness-gate-inject=enabled" (링크 : "https://github.com/demopassword/EKS/tree/main")
+AWS 로드 밸런서 컨트롤러를 Kubernetes 클러스터에 설치하는 명령어 : (수정 좀 해야됨) (링크 : "https://github.com/demopassword/EKS/tree/main")
+예시 : (주의 : "--set image.repository=602401143452.dkr.ecr.ap-northeast-2.amazonaws.com/amazon/aws-load-balancer-controller \" 이부분 바꾸면 안됨) (서울 리전 알려주는거임)
+helm repo add eks https://aws.github.io/eks-charts
+helm repo update
+
+helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
+    -n kube-system \
+    --set clusterName=<이름-cluster> \
+    --set serviceAccount.create=false \
+    --set serviceAccount.name=aws-load-balancer-controller \
+    --set image.repository=602401143452.dkr.ecr.ap-northeast-2.amazonaws.com/amazon/aws-load-balancer-controller \
+    --set region=ap-northeast-2 \
+    --set vpcId=<VPC ID>
+
+kube-system 네임스페이스내에 있는 모든 파드들의 목록을 조회하는 명령 : "k get pods -n kube-system" (진행상황 알려주는 명령어 같음)
+파드들 조회하는 명령어 : "k get pods -A" (모든 진행상황 알려주는 명령어 같음)
+aws가 들어가는 파드들 조회하는 명령어 : "k get pods -A | grep aws"
+
+링크에 들어가서 "ingress.yaml"을 복사하고, VScode에 있는 "ingress.yaml" 파일에 붙여넣기 (링크 : "https://github.com/demopassword/EKS/blob/main/ingress/ingress.yaml")
+"ingress.yaml" 파일 수정하기 (다른 코드를 넣고싶다면 (링크 : 검색창에 "alb.ingress.kubernetes.io"쳐서 들어가기))
+과제에서 200ok로 바꾸라하면 "{"type":"fixed-response","fixedResponseConfig":{"contentType":"text/plain","statusCode":"403"}}" 이부분 바꾸기 {"type":"fixed-response","fixedResponseConfig":{"contentType":"text/plain","statusCode":"200"}}
+예시 : 
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+    name: <이름-ingress>
+    namespace: <네임스페이스 이름>
+    annotations:
+      kubernetes.io/ingress.class: alb
+      alb.ingress.kubernetes.io/scheme: internet-facing
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/load-balancer-name: <이름-alb>
+      alb.ingress.kubernetes.io/healthcheck-path: /healthcheck
+      alb.ingress.kubernetes.io/healthcheck-port: "8080"
+      alb.ingress.kubernetes.io/healthcheck-interval-seconds: "5"
+      alb.ingress.kubernetes.io/healthcheck-timeout-seconds: "3"
+      alb.ingress.kubernetes.io/unhealthy-threshold-count: "3"
+      alb.ingress.kubernetes.io/healthy-threshold-count: "2"
+      alb.ingress.kubernetes.io/target-group-attributes: deregistration_delay.timeout_seconds=30
+      alb.ingress.kubernetes.io/load-balancer-attributes: access_logs.s3.enabled=true,access_logs.s3.bucket=<버킷 이름>,access_logs.s3.prefix=prefix
+      alb.ingress.kubernetes.io/actions.response-403: >
+        {"type":"fixed-response","fixedResponseConfig":{"contentType":"text/plain","statusCode":"403"}}
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /healthcheck
+            pathType: Exact
+            backend:
+              service:
+                name: response-403
+                port:
+                  name: use-annotation
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: <서비스 이름-svc>
+                port:
+                  number: 80
+
+ingress.yaml를 클러스터에 배포하는 명령어 : "k apply -f ./manifest/ingress.yaml" ("Warning"이 떠야되는거 같음)
+Ingress 리소스를 조회하는 명령어 : "k get ingress -n <네임스페이스 이름>" ("ADDRESS"에 뭐가 추가 되야함)
+Ingress 리소스에 대한 상세 정보를 조회하는 명령어 : "k describe ingress -n <네임스페이스 이름> <인그레스 이름>" (어떤 문제가 생겼는지 보는 명령어 같음) (영상에서는 "bucket permission" 문제가 생김)
+
+"bucket permission" 문제가 생겼을때 해결법
+ingress 리소스 삭제 : "k delete -f ./manifest/ingress.yaml"
+버킷 정책 : ""AWS": "arn:aws:iam::600734575887:root""
+ingress.yaml에서 지우는것 : "alb.ingress.kubernetes.io/load-balancer-attributes: access_logs.s3.enabled=true,access_logs.s3.bucket=<버킷 이름>,access_logs.s3.prefix=prefix"
+ingress.yaml를 클러스터에 배포하는 명령어 : "k apply -f ./manifest/ingress.yaml" ("Warning"이 떠야되는거 같음)
+Ingress 리소스를 조회하는 명령어 : "k get ingress -n <네임스페이스 이름>" ("ADDRESS"에 뭐가 추가 되야함)
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+eks 수정하기 (eks)
+"EKS" -> "클러스터" -> "만든 eks" -> "네트워킹" -> "엔드포인트 액세스 관리" : "프라이빗" (eks 생성 오래걸림)
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+보안 그룹 바꾸기
+bastion과 eks 연결 확인 명령어 : "k get pods -A" (아마도 맞는거같음)
+"EKS" -> "클러스터" -> "만든 eks" -> "네트워킹" -> "추가 보안 그룹" 인바운드 : "443", "bastion 보안 그룹"
