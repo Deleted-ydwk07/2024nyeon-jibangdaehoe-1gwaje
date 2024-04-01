@@ -1,0 +1,150 @@
+주의 : "대회때 문제 잘 보면서 따라하기"
+
+순서 : "ECR" -> "도커 빌드" -> "EKS"
+"EKS" 다음부터는 순서 크게 상관 없음
+
+리전 : "서울" 확인
+
+VPC 만들기(VPC)
+퍼블릭 서브넷 수 : "2"
+프라이빗 서브넷 수 : "4"
+
+ECR 만들기(ECR)
+과제에 나와있는대로 만들기 ("이미지에서 보안 취약점 스캔~" 이런식으로 나오면 "이미지 스캔 설정" 키기)
+
+EC2 만들기(EC2)
+모든 EC2 : 과제에 나와있는대로 만들기 ("PowerUserAccess", "탄력적 IP" 꼭 넣기)
+주의 : 서브넷 추가할때(CIDR) 잘 보고 넣기 (팁 : 서브넷 이름 안바꿨을때 서브넷 이름 보면 쉬움 OR 서브넷 CIDR보기)
+다 만들었으면 탄력적 IP 추가! ("탄력적 IP" 연결 된지 확인 하려면 "탄력적 IP" 들어가서 "연결된 인스턴스 ID" OR "인스턴스"에서 "탄력적 IP" 확인
+
+docker 빌드 하기(EC2(Bastion))
+git 패키지 설치 : "sudo yum install git" 역할 : git clone 사용할수 있게 해줌
+git 사용 : "git clone <링크>" 역할 : main.go를 가져올수 있게 해줌
+go 언어 설치 : "sudo yum install go" 역할 : go 사용 할수 있게 해줌
+docker 설치 : "sudo yum install docker" 역할 : docker 사용할수 있게 해줌
+go fmt 사용 : "sudo go fmt <파일.go>" 역할 : 코드를 읽고, 이해하기 쉽게 만들어줌
+go build 사용 : "go build <파일.go>", (예 : main.go), 역할 : 바이너리 파일 생성하는 명령어, 파일을 실행 시킬수 있게 만듦
+파일 실행 : "./<파일>", (예 : main.go), 역할 : 파일 실행, 위에 go build 명령어를 사용 해야 실행할 수 있음
+dockerfile 생성 : "nano dockerfile" 역할 : docker 이미지 빌드에 사용됨, dockerfile 안에는 docker 이미지를 빌드할때 필요한 모든 설정과 명령어가 있음 (주의 : "경로 잘 보기 예 : 현재 어디있는지")
+주의 하나 더! : "dockerfile" 만들때 안에 내용 잘 보고 맞게 썼나 한번 더 확인 하기(매우 중요함 실수 X)
+
+코드에서 쓰는 기본포트 뭔지 보기. 예 : nano main.go 해서, 기본 포트 보기
+
+
+
+기본 샘플 : (예시는 예시일뿐)
+예시 1(처음 "dockerfile" 작성할때 사용) : 
+FROM golang:alpine # Dockerfile은 Alpine Linux 기반의 Golang 이미지를 사용
+
+ADD . . # 현재 디렉토리에 있는 모든 파일들이 컨테이너 안으로 감
+
+EXPOSE <기본 포트 번호> # 컨테이너가 외부와 통신할 수 있도록 (기본 포트 번호) 포트를 열음
+
+RUN go build <빌드한 파일.go> # <빌드한 파일.go> 파일을 바이너리 파일로 생성함, 파일을 실행 시킬수 있게 만듦
+
+CMD ["./<빌드한 파일>"] # 컨테이너를 실행하면 자동으로 빌드한 파일을 실행함
+
+기본 샘플에서 예시 : (예시는 예시일뿐)
+예시 2 : 
+FROM golang:alpine
+
+ADD . .
+
+EXPOSE 5000
+
+RUN go build main.go 
+
+CMD ["./main"]
+
+쌤이 샘플로 주신 포트 바꾸는 법 : (예시는 예시일뿐)
+예시 3 : 
+FROM golang:alpine # Dockerfile은 Alpine Linux 기반의 Golang 이미지를 사용
+
+ADD . . # 현재 디렉토리에 있는 모든 파일들이 컨테이너 안으로 감
+
+EXPOSE <기본 포트 번호> # 컨테이너가 외부와 통신할 수 있도록 (기본 포트 번호) 포트를 열음
+
+RUN go build main.go # main.go 파일을 바이너리 파일로 생성함, 파일을 실행 시킬수 있게 만듦
+
+CMD ["./main"] # 컨테이너를 실행하면 자동으로 main.go 파일을 실행함
+
+대회때 포트 바꾸는 법(주의 : 포트 바꿀때 사용) : (예시는 예시일뿐)
+예시 4 : 
+FROM golang:alpine # Dockerfile은 Alpine Linux 기반의 Golang 이미지를 사용
+
+ADD . . # 현재 디렉토리에 있는 모든 파일들이 컨테이너 안으로 감
+
+EXPOSE <기본 포트 번호> # 컨테이너가 외부와 통신할 수 있도록 (기본 포트 번호) 포트를 열음
+
+RUN go build main.go # main.go 파일을 바이너리 파일로 생성함, 파일을 실행 시킬수 있게 만듦
+
+CMD ["./main", "--port", "<포트 번호>"] # 컨테이너를 실행하면 자동으로 main.go 파일을 실행함
+
+순서 : "docker A 이미지 빌드" -> "A 레포지토리 푸시 명령" -> "A 이미지 생성 확인" -> "docker B 이미지 빌드" -> "B 레포지토리 푸시 명령" -> "B 이미지 생성 확인" (중요)
+docker 이미지 빌드  : "sudo docker build -t <ECR 레포지토리 이름>:latest ." (에러 뜨면 : "sudo service docker restart") 역할 : docker 빌드하고, 이미지 푸시 할수 있게 해줌
+레포지토리 푸시 명령 : "ECR" -> "푸시 명령 보기", "1", "2", "3", "4" 복붙하기
+
+1. 예시 1 : "aws ecr get-login-password --region <리전> | docker login --username AWS --password-stdin <레포지토리 URL(숫자)>.dkr.ecr.<리전>.amazonaws.com" ("푸시 명령 보기"에 있음)
+예시 2 : "aws ecr get-login-password --region ap-northeast-2 | docker login --username AWS --password-stdin 210761305382.dkr.ecr.ap-northeast-2.amazonaws.com"
+"permission denied"오류 예시 1 : "aws ecr get-login-password --region <리전> | sudo docker login --username AWS --password-stdin <레포지토리 URL(숫자)>.dkr.ecr.<리전>.amazonaws.com"
+"permission denied"오류 예시 2 : "aws ecr get-login-password --region ap-northeast-2 | sudo docker login --username AWS --password-stdin 210761305382.dkr.ecr.ap-northeast-2.amazonaws.com"
+aws configure 예 : "bastion에 PowerUserAccess 안넣어서 그럼("bastion"에 "PowerUserAccess" 넣고 다시 만들기)"
+
+2. 예시 1" : "docker build -t <ECR 레포지토리 이름> ." ("푸시 명령 보기"에 있음)
+예시 2 : "docker build -t ws-a ."
+"permission denied"오류 예시 1 : "sudo docker build -t <ECR 레포지토리 이름> ."
+"permission denied"오류 예시 2 : "sudo docker build -t ws-a ."
+
+3. 예시 1" : "docker tag <ECR 레포지토리 이름>:latest <레포지토리 URL(숫자)>.dkr.ecr.<리전>.amazonaws.com/<ECR 레포지토리 이름>:latest" ("푸시 명령 보기"에 있음)
+예시 2 : "docker tag ws-a:latest 210761305382.dkr.ecr.ap-northeast-2.amazonaws.com/ws-a:latest"
+"permission denied"오류 예시 1 : "sudo docker tag <ECR 레포지토리 이름>:latest <레포지토리 URL(숫자)>.dkr.ecr.<리전>.amazonaws.com/<ECR 레포지토리 이름>:latest"
+"permission denied"오류 예시 2 : "sudo docker tag ws-a:latest 210761305382.dkr.ecr.ap-northeast-2.amazonaws.com/ws-a:latest"
+
+4. 예시 1" : "docker push <레포지토리 URL(숫자)>.dkr.ecr.<리전>.amazonaws.com/<ECR 레포지토리 이름>:latest" ("푸시 명령 보기"에 있음)
+예시 2 : "docker push 210761305382.dkr.ecr.ap-northeast-2.amazonaws.com/ws-a:latest"
+"permission denied"오류 예시 1 : "sudo docker push <레포지토리 URL(숫자)>.dkr.ecr.<리전>.amazonaws.com/<ECR 레포지토리 이름>:latest"
+"permission denied"오류 예시 2 : "sudo docker push 210761305382.dkr.ecr.ap-northeast-2.amazonaws.com/ws-a:latest"
+
+EKS 만들기(EKS)
+"EKS" 만들기 전에 "보안 그룹" 미리 만들고 "EKS" 만들기("보안 그룹" 설정은 과제에 나오는대로 하기)
+클러스터 서비스 역할 : "AmazonEKSClusterPolicy"
+만들때 중요한것 : "네트워킹" 부분 잘 신경쓰기
+나머지는 과제에서 나와있는대로 하기, 과제에 안나오면 그냥 두기
+
+EKS 역할 만들기(보안 자격 증명)
+신뢰할 수 있는 엔터티 유형 : "AWS 서비스"
+서비스 또는 사용 사례 : "EKS"
+사용 사례 : "EKS - Cluster"
+정책 이름 : "AmazonEKSClusterPolicy"
+역할 이름 : "AmazonEKSClusterPolicy-Role"(추천)
+
+Fargate 만들기(EKS) : "클러스터" -> "컴퓨팅" -> "Fargate 프로파일 추가"
+이름 : "<과제에 나와있는대로 하기>"
+포드 실행 역할 : "AmazonEKSFargatePodExecutionRolePolicy"
+서브넷 : "프라이빗" 과제에 나와있는 대로 고르기(팁 : CIDR 낮은 프라이빗으로 고르면 됨)
+네임스페이스 : "<과제에 나오는대로 하기>"
+
+Fargate 역할 만들기(보안 자격 증명)
+신뢰할 수 있는 엔터티 유형 : "AWS 서비스"
+서비스 또는 사용 사례 : "EKS - Fargate pod"
+정책 이름 : "AmazonEKSFargatePodExecutionRolePolicy"
+역할 이름 : "AmazonEKSFargatePodExecutionRolePolicy-Role"(추천)
+
+서브넷 그룹 만들기(DocumentDB) : "DocumentDB" -> "서브넷 그룹"
+이름 : "<과제에 나와있는대로 하기, 안나오면 알아서 정하기>"
+VPC : 해당 "VPC" 선택
+서브넷 : "<Protected subnet>"넣기(팁 : CIDR 높은걸로 OR VPC 서브넷 보기)
+
+
+DocumentDB 만들기(DocumentDB)
+Compute resources : 인스턴스 연결~ 나오면 "Connect to an EC2 compute resource"고르기
+"고급 설정 표시" 누르기
+포트 : 기본 포트 : "27017"
+유지 관리 기간 : "9시간" 줄여야 함(시차)
+예시 : AWS : 월 10:00 -> 우리나라 : 월 01:00
+Amazon CloudWatch Logs에 게시할 로그 유형 선택 : "감사 로그", "프로파일러 로그"
+나머지는 과제에서 나오는대로 하기
+
+
+
+매우 중요 : 어떻게 돌아가는지 잘 보고, "보안 그룹" 잘 바꾸기
